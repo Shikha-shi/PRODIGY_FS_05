@@ -1,60 +1,30 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { errorMessage } from "../services/api";
 
 const Login = () => {
   const navigate = useNavigate();
+  const { user, loading: authLoading, login } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  if (!authLoading && user) return <Navigate to="/home" replace />;
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-
     setLoading(true);
     setError("");
 
     try {
-      const formData = new URLSearchParams();
-
-      formData.append("username", email);
-      formData.append("password", password);
-
-      const response = await api.post(
-        "/auth/login",
-        formData,
-        {
-          headers: {
-            "Content-Type":
-              "application/x-www-form-urlencoded",
-          },
-        }
-      );
-
-      const token = response.data.access_token;
-
-      if (!token) {
-        throw new Error("No access token received");
-      }
-
-      localStorage.setItem("vibe_token", token);
-
-      console.log("Login successful");
-      console.log("Token saved:", !!localStorage.getItem("vibe_token"));
-
-      navigate("/profile", { replace: true });
-    } catch (error: any) {
-      console.error("Login error:", error);
-
-      setError(
-        error.response?.data?.detail ||
-          error.message ||
-          "Login failed"
-      );
+      await login(email, password);
+      navigate("/home", { replace: true });
+    } catch (err) {
+      setError(errorMessage(err, "Login failed"));
     } finally {
       setLoading(false);
     }
@@ -63,48 +33,37 @@ const Login = () => {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="brand">
+        <Link to="/" className="brand">
           <h1>Vibe</h1>
           <p>Connect. Share. Vibe.</p>
-        </div>
+        </Link>
 
         <h2>Welcome back</h2>
 
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
+        {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit}>
           <input
             type="email"
             placeholder="Email"
             value={email}
-            onChange={(event) =>
-              setEmail(event.target.value)
-            }
+            onChange={(event) => setEmail(event.target.value)}
             required
           />
-
           <input
             type="password"
             placeholder="Password"
             value={password}
-            onChange={(event) =>
-              setPassword(event.target.value)
-            }
+            onChange={(event) => setPassword(event.target.value)}
             required
           />
-
-          <button type="submit" disabled={loading}>
+          <button className="btn btn-primary" type="submit" disabled={loading}>
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
 
         <p className="auth-link">
-          Don't have an account?{" "}
-          <Link to="/register">Create one</Link>
+          Don't have an account? <Link to="/register">Create one</Link>
         </p>
       </div>
     </div>

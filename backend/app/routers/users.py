@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import shutil
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,6 +13,13 @@ from app.schemas import (
     UpdateProfile,
 )
 from app.routers.auth import get_current_user
+from app.schemas import UserBrief
+from app.services import serialize_users
+
+AVATAR_DIR = "uploads/avatars"
+AVATAR_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+os.makedirs(AVATAR_DIR, exist_ok=True)
 
 
 router = APIRouter(
@@ -55,6 +66,68 @@ def update_my_profile(
     db.refresh(current_user)
 
     return current_user
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+def upload_avatar(
+    avatar: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    extension = os.path.splitext(avatar.filename or "")[1].lower()
+
+    if extension not in AVATAR_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Profile photo must be an image",
+        )
+
+    filename = f"{uuid4().hex}{extension}"
+    with open(os.path.join(AVATAR_DIR, filename), "wb") as buffer:
+        shutil.copyfileobj(avatar.file, buffer)
+
+    current_user.profile_image = f"/{AVATAR_DIR}/{filename}"
+    db.commit()
+    db.refresh(current_user)
+
+    return current_user
+
+
+@router.get("/search", response_model=list[UserBrief])
+def search_users(
+    q: str = "",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(User).filter(User.id != current_user.id)
+
+    if q.strip():
+        query = query.filter(User.username.ilike(f"%{q.strip()}%"))
+
+    users = query.order_by(User.username.asc()).limit(30).all()
+    return serialize_users(db, users, current_user)
+
+
+@router.get("/suggestions", response_model=list[UserBrief])
+def suggested_users(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    followed = [
+        row[0]
+        for row in db.query(Follow.following_id)
+        .filter(Follow.follower_id == current_user.id)
+        .all()
+    ]
+
+    users = (
+        db.query(User)
+        .filter(User.id != current_user.id, User.id.notin_(followed))
+        .order_by(User.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    return serialize_users(db, users, current_user)
 
 
 @router.get(

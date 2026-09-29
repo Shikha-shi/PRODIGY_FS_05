@@ -199,6 +199,7 @@ class Notification(Base):
         nullable=True,
     )
 
+    post_id = Column(Integer, nullable=True)
     type = Column(String(50), nullable=False)
     message = Column(String(255), nullable=False)
     is_read = Column(Boolean, default=False)
@@ -255,3 +256,30 @@ class PostHashtag(Base):
             name="unique_post_hashtag",
         ),
     )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    sender_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    receiver_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    content = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])

@@ -1,117 +1,93 @@
-import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+import Avatar from "../components/Avatar";
+import { useAuth } from "../context/AuthContext";
+import api, { errorMessage } from "../services/api";
 
 const EditProfile = () => {
   const navigate = useNavigate();
+  const { user, refreshUser } = useAuth();
 
-  const [username, setUsername] = useState("");
-  const [bio, setBio] = useState("");
-  const [profileImage, setProfileImage] = useState("");
-
-  const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState(user?.username ?? "");
+  const [bio, setBio] = useState(user?.bio ?? "");
+  const [image, setImage] = useState(user?.profile_image ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const response = await api.get("/users/me");
+  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-        setUsername(response.data.username);
-        setBio(response.data.bio || "");
-        setProfileImage(
-          response.data.profile_image || ""
-        );
-      } catch {
-        setError("Unable to load profile");
-      } finally {
-        setLoading(false);
-      }
-    };
+    const formData = new FormData();
+    formData.append("avatar", file);
 
-    loadProfile();
-  }, []);
+    try {
+      const response = await api.post("/users/me/avatar", formData);
+      setImage(response.data.profile_image);
+      await refreshUser();
+    } catch (err) {
+      setError(errorMessage(err, "Unable to upload photo"));
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-
     setSaving(true);
     setError("");
 
     try {
-      await api.put("/users/me", {
-        username,
-        bio,
-        profile_image: profileImage || null,
-      });
-
+      await api.put("/users/me", { username, bio });
+      await refreshUser();
       navigate("/profile");
-    } catch (error: any) {
-      setError(
-        error.response?.data?.detail ||
-          "Unable to update profile"
-      );
+    } catch (err) {
+      setError(errorMessage(err, "Unable to update profile"));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="profile-page">
-        Loading...
-      </div>
-    );
-  }
-
   return (
-    <div className="profile-page">
-      <div className="edit-profile-card">
-        <h1>Edit Profile</h1>
+    <div className="page narrow">
+      <div className="card">
+        <div className="page-title">
+          <h1>Edit profile</h1>
+        </div>
 
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
+        {error && <div className="error-message">{error}</div>}
 
-        <form onSubmit={handleSubmit}>
+        <div className="avatar-edit">
+          <Avatar username={username || "?"} image={image} size={80} />
+          <label className="btn btn-outline">
+            Change photo
+            <input type="file" accept="image/*" onChange={uploadAvatar} hidden />
+          </label>
+        </div>
+
+        <form onSubmit={handleSubmit} className="stack">
           <label>Username</label>
-
           <input
             value={username}
-            onChange={(event) =>
-              setUsername(event.target.value)
-            }
+            onChange={(event) => setUsername(event.target.value)}
             required
           />
 
           <label>Bio</label>
-
           <textarea
             value={bio}
-            onChange={(event) =>
-              setBio(event.target.value)
-            }
+            onChange={(event) => setBio(event.target.value)}
             placeholder="Tell people about yourself..."
             rows={4}
           />
 
-          <label>Profile Image URL</label>
-
-          <input
-            value={profileImage}
-            onChange={(event) =>
-              setProfileImage(event.target.value)
-            }
-            placeholder="https://..."
-          />
-
-          <button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
+          <div className="row-between">
+            <button type="button" className="btn btn-outline" onClick={() => navigate("/profile")}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
         </form>
       </div>
     </div>

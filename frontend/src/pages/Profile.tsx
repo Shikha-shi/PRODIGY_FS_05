@@ -1,158 +1,158 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import api from "../services/api";
-
-interface ProfileData {
-  id: number;
-  username: string;
-  email?: string;
-  bio: string | null;
-  profile_image: string | null;
-  followers_count: number;
-  following_count: number;
-  posts_count: number;
-}
+import { Link, useNavigate, useParams } from "react-router-dom";
+import Avatar from "../components/Avatar";
+import FollowButton from "../components/FollowButton";
+import PostCard from "../components/PostCard";
+import { useAuth } from "../context/AuthContext";
+import api, { errorMessage } from "../services/api";
+import type { Post, ProfileData } from "../types";
 
 const Profile = () => {
-  const { username } = useParams();
+  const { username: routeUsername } = useParams();
+  const { user: me } = useAuth();
   const navigate = useNavigate();
 
+  const username = routeUsername ?? me?.username;
+  const isOwn = !!me && username === me.username;
+
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isFollowing, setIsFollowing] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    if (!username) return;
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError("");
+
       try {
-        const response = username
-          ? await api.get(`/users/${username}`)
-          : await api.get("/users/me");
+        const [profileRes, postsRes, statusRes] = await Promise.all([
+          api.get<ProfileData>(`/users/${username}`),
+          api.get<Post[]>(`/posts/user/${username}`),
+          api.get(`/follows/status/${username}`),
+        ]);
 
-        const data = response.data;
-
-        setProfile({
-          id: data.id,
-          username: data.username,
-          email: data.email,
-          bio: data.bio ?? null,
-          profile_image: data.profile_image ?? null,
-          followers_count: data.followers_count ?? 0,
-          following_count: data.following_count ?? 0,
-          posts_count: data.posts_count ?? 0,
-        });
-      } catch (err: any) {
-        console.error(err);
-
-        setError(
-          err.response?.data?.detail ||
-            "Unable to load profile"
-        );
+        if (cancelled) return;
+        setProfile(profileRes.data);
+        setPosts(postsRes.data);
+        setIsFollowing(statusRes.data.is_following);
+      } catch (err) {
+        if (!cancelled) setError(errorMessage(err, "Unable to load profile"));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    fetchProfile();
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [username]);
 
-  if (loading) {
-    return (
-      <div className="profile-page">
-        <div className="profile-card">
-          <h2>Loading profile...</h2>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="page narrow"><p className="muted">Loading profile...</p></div>;
 
-  if (error) {
+  if (error || !profile) {
     return (
-      <div className="profile-page">
-        <div className="profile-card">
-          <h2>Something went wrong</h2>
-          <p>{error}</p>
-
-          <button
-            onClick={() => navigate("/login")}
-          >
-            Back to Login
+      <div className="page narrow">
+        <div className="card empty">
+          <h2>{error || "Profile not found"}</h2>
+          <button className="btn btn-primary" onClick={() => navigate("/home")}>
+            Back home
           </button>
         </div>
       </div>
     );
   }
 
-  if (!profile) {
-    return (
-      <div className="profile-page">
-        <div className="profile-card">
-          <h2>Profile not found</h2>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="profile-page">
-      <div className="profile-card">
+    <div className="page narrow">
+      <div className="card profile-card">
         <div className="profile-header">
-          <div className="profile-avatar">
-            {profile.profile_image ? (
-              <img
-                src={profile.profile_image}
-                alt={profile.username}
-              />
-            ) : (
-              profile.username
-                .charAt(0)
-                .toUpperCase()
-            )}
-          </div>
+          <Avatar username={profile.username} image={profile.profile_image} size={104} />
 
           <div className="profile-info">
             <div className="profile-title">
               <h1>@{profile.username}</h1>
 
-              {!username && (
-                <button
-                  onClick={() =>
-                    navigate("/edit-profile")
-                  }
-                >
-                  Edit Profile
+              {isOwn ? (
+                <button className="btn btn-outline" onClick={() => navigate("/edit-profile")}>
+                  Edit profile
                 </button>
+              ) : (
+                <>
+                  <FollowButton
+                    username={profile.username}
+                    isFollowing={isFollowing}
+                    onChange={(status) => {
+                      setIsFollowing(status.is_following);
+                      setProfile((current) =>
+                        current
+                          ? {
+                              ...current,
+                              followers_count: status.followers_count,
+                              following_count: status.following_count,
+                            }
+                          : current
+                      );
+                    }}
+                  />
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => navigate(`/messages/${profile.username}`)}
+                  >
+                    Message
+                  </button>
+                </>
               )}
             </div>
 
             <div className="profile-stats">
               <span>
-                <strong>
-                  {profile.posts_count}
-                </strong>{" "}
-                posts
+                <strong>{profile.posts_count}</strong> posts
               </span>
-
-              <span>
-                <strong>
-                  {profile.followers_count}
-                </strong>{" "}
-                followers
-              </span>
-
-              <span>
-                <strong>
-                  {profile.following_count}
-                </strong>{" "}
-                following
-              </span>
+              <Link to={`/profile/${profile.username}/followers`}>
+                <strong>{profile.followers_count}</strong> followers
+              </Link>
+              <Link to={`/profile/${profile.username}/following`}>
+                <strong>{profile.following_count}</strong> following
+              </Link>
             </div>
 
-            <p>
-              {profile.bio || "No bio yet."}
-            </p>
+            <p className="bio">{profile.bio || "No bio yet."}</p>
           </div>
         </div>
       </div>
+
+      <h3 className="section-title">Posts</h3>
+
+      {posts.length === 0 && (
+        <div className="card empty">
+          <h2>No posts yet</h2>
+          {isOwn && (
+            <Link to="/create" className="btn btn-primary">
+              Share your first post
+            </Link>
+          )}
+        </div>
+      )}
+
+      {posts.map((post) => (
+        <PostCard
+          key={post.id}
+          post={post}
+          onDelete={(id) => {
+            setPosts((list) => list.filter((item) => item.id !== id));
+            setProfile((current) =>
+              current ? { ...current, posts_count: current.posts_count - 1 } : current
+            );
+          }}
+        />
+      ))}
+
     </div>
   );
 };
