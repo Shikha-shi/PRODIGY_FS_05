@@ -1,6 +1,6 @@
+from pydantic import BaseModel, EmailStr, ConfigDict
+from typing import Optional
 from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserCreate(BaseModel):
@@ -15,14 +15,32 @@ class UserLogin(BaseModel):
 
 
 class UserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     username: str
     email: EmailStr
-    bio: str | None = None
-    profile_image: str | None = None
+    bio: Optional[str] = None
+    profile_image: Optional[str] = None
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    username: str
+    bio: Optional[str] = None
+    profile_image: Optional[str] = None
+    followers_count: int
+    following_count: int
+    posts_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UpdateProfile(BaseModel):
+    username: Optional[str] = None
+    bio: Optional[str] = None
+    profile_image: Optional[str] = None
 
 
 class Token(BaseModel):
@@ -31,15 +49,17 @@ class Token(BaseModel):
 
 
 class PostCreate(BaseModel):
-    content: str | None = None
+    content: Optional[str] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
 
 
 class PostResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
-    content: str | None
-    media_url: str | None
-    media_type: str | None
+    content: Optional[str] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
     author_id: int
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
